@@ -1,4 +1,4 @@
-if exists('g:loaded_gitgutter') || !executable('git') || !has('signs') || &cp
+if exists('g:loaded_gitgutter') || (!executable('git') && !executable('svn')) || !has('signs') || &cp
   finish
 endif
 let g:loaded_gitgutter = 1
@@ -25,7 +25,8 @@ call s:set('g:gitgutter_sign_added', '+')
 call s:set('g:gitgutter_sign_modified', '~')
 call s:set('g:gitgutter_sign_removed', '_')
 call s:set('g:gitgutter_sign_modified_removed', '~_')
-call s:set('g:gitgutter_diff_args', '')
+call s:set('g:gitgutter_diff_args_git', '')
+call s:set('g:gitgutter_diff_args_svn', '')
 
 let s:file = ''
 
@@ -55,7 +56,7 @@ endfunction
 " Utility {{{
 
 function! s:is_active()
-  return g:gitgutter_enabled && s:exists_file() && s:is_in_a_git_repo() && s:is_tracked_by_git()
+  return g:gitgutter_enabled && s:exists_file() && s:is_in_a_repo() && s:is_tracked_by_repo()
 endfunction
 
 function! s:current_file()
@@ -93,14 +94,30 @@ function! s:command_in_directory_of_file(cmd)
   return 'cd ' . s:directory_of_file() . ' && ' . a:cmd
 endfunction
 
-function! s:is_in_a_git_repo()
+function! s:is_in_a_repo()
   let cmd = 'git rev-parse' . s:discard_stdout_and_stderr()
   call system(s:command_in_directory_of_file(cmd))
-  return !v:shell_error
+  if !v:shell_error
+    let b:gitgutter_repo = 1
+    return 1
+  endif
+
+  let cmd = 'svn proplist .' . s:discard_stdout_and_stderr()
+  call system(s:command_in_directory_of_file(cmd))
+  if !v:shell_error
+    let b:gitgutter_repo = 2
+    return 1
+  endif
+
+  return 0
 endfunction
 
-function! s:is_tracked_by_git()
-  let cmd = 'git ls-files --error-unmatch' . s:discard_stdout_and_stderr() . ' ' . shellescape(s:file())
+function! s:is_tracked_by_repo()
+  if b:gitgutter_repo == 1
+    let cmd = 'git ls-files --error-unmatch' . s:discard_stdout_and_stderr() . ' ' . shellescape(s:file())
+  else
+    let cmd = 'svn info' . s:discard_stdout_and_stderr() . ' ' . shellescape(s:file())
+  endif
   call system(s:command_in_directory_of_file(cmd))
   return !v:shell_error
 endfunction
@@ -194,9 +211,14 @@ endfunction
 " Diff processing {{{
 
 function! s:run_diff()
-  let cmd = 'git diff --no-ext-diff --no-color -U0 ' . g:gitgutter_diff_args . ' ' .
-        \ shellescape(s:file()) .  ' | grep -e "^@@ "'
-  let diff = system(s:command_in_directory_of_file(cmd))
+  if b:gitgutter_repo == 1
+    let cmd = 'git diff --no-ext-diff --no-color -U0 ' . g:gitgutter_diff_args_git . ' ' .
+        \ shellescape(s:file())
+  else
+    let cmd = 'svn diff --diff-cmd diff -x "-U0 ' . g:gitgutter_diff_args_svn . '" ' .
+        \ shellescape(s:file())
+  endif
+  let diff = system(s:command_in_directory_of_file(cmd . ' | grep -e "^@@ "'))
   return diff
 endfunction
 
