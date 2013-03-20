@@ -169,6 +169,7 @@ function! s:define_signs()
   sign define GitGutterLineModified
   sign define GitGutterLineRemoved
   sign define GitGutterLineModifiedRemoved
+  sign define GitGutterDummy
 
   call s:define_sign_symbols()
   call s:define_sign_text_highlights()
@@ -362,7 +363,7 @@ function! s:find_other_signs(file_name)
   redir END
   let s:other_signs = []
   for sign_line in split(signs, '\n')
-    if sign_line =~ '^\s\+\w\+='
+    if sign_line =~ '^\s\+\w\+=' && stridx(sign_line, 'name=GitGutterDummy') == -1
       let matches = matchlist(sign_line, '^\s\+\w\+=\(\d\+\)')
       let line_number = str2nr(matches[1])
       call add(s:other_signs, line_number)
@@ -406,6 +407,10 @@ function! s:is_other_sign(line_number)
   return index(s:other_signs, a:line_number) == -1 ? 0 : 1
 endfunction
 
+function! s:do_change_signs_exist(file_name)
+  return has_key(s:sign_ids, a:file_name) && len(s:sign_ids[a:file_name]) > 0
+endfunction
+
 " }}}
 
 " Public interface {{{
@@ -425,9 +430,22 @@ function! GitGutter(file)
     let diff = s:run_diff()
     let s:hunks = s:parse_diff(diff)
     let modified_lines = s:process_hunks(s:hunks)
+
+    " Add a dummy sign to hold the signcolumn open so it doesn't jump.
+    " Only add if we've got signs, or else we could needlessly open the signcolumn.
+    let dummy_id = -1
+    if s:do_change_signs_exist(a:file)
+      let dummy_id = s:next_sign_id()
+      exe ":sign place " . dummy_id . " line=1 name=GitGutterDummy file=" . a:file
+    endif
+
     call s:clear_signs(a:file)
     call s:find_other_signs(a:file)
     call s:show_signs(a:file, modified_lines)
+
+    if dummy_id != -1
+      exe ":sign unplace " . dummy_id . " file=" . a:file
+    endif
   endif
 endfunction
 command GitGutter call GitGutter(s:current_file())
