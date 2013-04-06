@@ -15,18 +15,20 @@ function! s:set(var, default)
   endif
 endfunction
 
-call s:set('g:gitgutter_enabled', 1)
-call s:set('g:gitgutter_highlight_lines', 0)
+call s:set('g:gitgutter_enabled',               1)
+call s:set('g:gitgutter_signs',                 1)
+call s:set('g:gitgutter_highlight_lines',       0)
 let s:highlight_lines = g:gitgutter_highlight_lines
-call s:set('g:gitgutter_sign_column_always', 0)
-call s:set('g:gitgutter_on_bufenter', 1)
-call s:set('g:gitgutter_all_on_focusgained', 1)
-call s:set('g:gitgutter_sign_added', '+')
-call s:set('g:gitgutter_sign_modified', '~')
-call s:set('g:gitgutter_sign_removed', '_')
+call s:set('g:gitgutter_sign_column_always',    0)
+call s:set('g:gitgutter_on_bufenter',           1)
+call s:set('g:gitgutter_all_on_focusgained',    1)
+call s:set('g:gitgutter_sign_added',            '+')
+call s:set('g:gitgutter_sign_modified',         '~')
+call s:set('g:gitgutter_sign_removed',          '_')
 call s:set('g:gitgutter_sign_modified_removed', '~_')
-call s:set('g:gitgutter_diff_args_git', '')
-call s:set('g:gitgutter_diff_args_svn', '')
+call s:set('g:gitgutter_diff_args_git',         '')
+call s:set('g:gitgutter_diff_args_svn',         '')
+call s:set('g:gitgutter_escape_grep',           0)
 
 let s:file = ''
 
@@ -45,6 +47,9 @@ function! s:init()
     let s:next_sign_id = s:first_sign_id
     let s:sign_ids = {}  " key: filename, value: list of sign ids
     let s:other_signs = []
+
+    let s:grep_available = executable('grep')
+    let s:grep_command = ' | ' . (g:gitgutter_escape_grep ? '\grep' : 'grep') . ' -e "^@@ "'
 
     let g:gitgutter_initialised = 1
   endif
@@ -129,14 +134,6 @@ function! s:buffers()
   return filter(range(1, bufnr('$')), 'buflisted(v:val)')
 endfunction
 
-function! s:visible_buffers()
-  let visible = []
-  for i in range(tabpagenr('$'))
-    call extend(visible, tabpagebuflist(i + 1))
-  endfor
-  return visible
-endfunction
-
 " }}}
 
 " Highlights and signs {{{
@@ -171,8 +168,10 @@ function! s:define_signs()
   sign define GitGutterLineModifiedRemoved
   sign define GitGutterDummy
 
-  call s:define_sign_symbols()
-  call s:define_sign_text_highlights()
+  if g:gitgutter_signs
+    call s:define_sign_symbols()
+    call s:define_sign_text_highlights()
+  endif
   call s:define_sign_line_highlights()
 endfunction
 
@@ -217,7 +216,10 @@ function! s:run_diff()
     let cmd = 'svn diff --diff-cmd diff -x "-U0 ' . g:gitgutter_diff_args_svn . '" ' .
         \ shellescape(s:file())
   endif
-  let diff = system(s:command_in_directory_of_file(cmd . ' | grep -e "^@@ "'))
+  if s:grep_available
+    let cmd .= s:grep_command
+  endif
+  let diff = system(s:command_in_directory_of_file(cmd))
   return diff
 endfunction
 
@@ -416,9 +418,9 @@ endfunction
 " Public interface {{{
 
 function! GitGutterAll()
-  let buffer_ids = g:gitgutter_on_bufenter ? s:visible_buffers() : s:buffers()
+  let buffer_ids = g:gitgutter_on_bufenter ? tabpagebuflist() : s:buffers()
   for buffer_id in buffer_ids
-    call GitGutter(fnamemodify(bufname(buffer_id), ':p'))
+    call GitGutter(expand('#' . buffer_id . ':p'))
   endfor
 endfunction
 command GitGutterAll call GitGutterAll()
@@ -551,8 +553,11 @@ augroup gitgutter
   else
     autocmd BufReadPost,BufWritePost,FileReadPost,FileWritePost * call GitGutter(s:current_file())
   endif
-  if g:gitgutter_all_on_focusgained && !has('gui_win32')
-    autocmd FocusGained * call GitGutterAll()
+  if g:gitgutter_all_on_focusgained
+    if !has('gui_win32')
+      autocmd FocusGained * call GitGutterAll()
+    endif
+    autocmd TabEnter * call GitGutterAll()
   endif
 augroup END
 

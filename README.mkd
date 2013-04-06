@@ -63,7 +63,7 @@ nmap <silent> ]h :<C-U>execute v:count1 . "GitGutterNextHunk"<CR>
 nmap <silent> [h :<C-U>execute v:count1 . "GitGutterPrevHunk"<CR>
 ```
 
-Finally, you can force vim-gitgutter to update its signs across all buffers with `:GitGutterAll`.
+Finally, you can force vim-gitgutter to update its signs across all visible buffers with `:GitGutterAll`.
 
 See the customisation section below for how to change the defaults.
 
@@ -77,10 +77,12 @@ You can customise:
 * The signs' colours and symbols
 * Line highlights
 * Extra arguments for `git diff`
+* Whether or not to escape `grep` (default to no)
 * Whether or not vim-gitgutter is on initially (defaults to on)
+* Whether or not signs are shown (defaults to yes)
 * Whether or not line highlighting is on initially (defaults to off)
 * Whether or not vim-gitgutter runs on `BufEnter` (defaults to yes)
-* Whether or not vim-gitgutter runs for all buffers on `FocusGained` (defaults to yes)
+* Whether or not vim-gitgutter runs for all visible buffers on `FocusGained` (defaults to yes)
 
 Please note that vim-gitgutter won't override any colours or highlights you've set in your colorscheme.
 
@@ -124,6 +126,14 @@ let g:gitgutter_sign_removed = 'zz'
 let g:gitgutter_sign_modified_removed = 'ww'
 ```
 
+#### Whether or not signs are shown
+
+If you never want signs to be shown (presumably you only want the line highlights), add this to your `~/.vimrc`:
+
+```viml
+let g:gitgutter_signs = 0
+```
+
 #### Line highlights
 
 Similarly to the signs' colours, set up the following highlight groups in your colorscheme or `~/.vimrc`:
@@ -141,6 +151,14 @@ If you want to pass extra arguments to `git diff`, for example to ignore whitesp
 
 ```viml
 let g:gitgutter_diff_args = '-w'
+```
+
+#### Whether or not to escape `grep`
+
+If you have `grep` aliased to something which changes its output, for example `grep --color=auto -H`, you will need to tell vim-gitgutter to use raw grep:
+
+```viml
+let g:gitgutter_escape_grep = 1
 ```
 
 #### To turn off vim-gitgutter by default
@@ -164,7 +182,7 @@ let g:gitgutter_on_bufenter = 0
 If you turn it off, vim-gitgutter will instead run every time you read or write a buffer.
 
 
-#### To stop vim-gitgutter running for all buffers on `FocusGained`
+#### To stop vim-gitgutter running for all visible buffers on `FocusGained`
 
 This is on by default but causes a noticeable lag for some people.  To turn it off, add this to your `~/.vimrc`:
 
