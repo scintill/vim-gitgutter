@@ -1,4 +1,4 @@
-if exists('g:loaded_gitgutter') || !executable('git') || !has('signs') || &cp
+if exists('g:loaded_gitgutter') || (!executable('git') && !executable('svn')) || !has('signs') || &cp
   finish
 endif
 let g:loaded_gitgutter = 1
@@ -27,10 +27,12 @@ call s:set('g:gitgutter_sign_modified',         '~')
 call s:set('g:gitgutter_sign_removed',          '_')
 call s:set('g:gitgutter_sign_modified_removed', '~_')
 call s:set('g:gitgutter_diff_args',             '')
+call s:set('g:gitgutter_diff_args_svn',         '')
 call s:set('g:gitgutter_escape_grep',           0)
 
 let s:file = ''
 let s:hunk_summary = [0, 0, 0]
+let s:file_repotype = 0
 
 function! s:init()
   if !exists('g:gitgutter_initialised')
@@ -61,7 +63,7 @@ endfunction
 " Utility {{{
 
 function! s:is_active()
-  return g:gitgutter_enabled && s:exists_file() && s:is_in_a_git_repo() && s:is_tracked_by_git()
+  return g:gitgutter_enabled && s:exists_file() && s:is_in_a_repo() && s:is_tracked_by_repo()
 endfunction
 
 function! s:current_file()
@@ -70,6 +72,23 @@ endfunction
 
 function! s:set_file(file)
   let s:file = a:file
+
+  let cmd = s:escape('git rev-parse' . s:discard_stdout_and_stderr())
+  call system(s:command_in_directory_of_file(cmd))
+  if !v:shell_error
+    let s:file_repotype = 1
+    return
+  endif
+
+  let cmd = s:escape('svn proplist .' . s:discard_stdout_and_stderr())
+  call system(s:command_in_directory_of_file(cmd))
+  if !v:shell_error
+    let s:file_repotype = 2
+    return
+  endif
+
+  let s:file_repotype = 0
+  return
 endfunction
 
 function! s:file()
@@ -112,14 +131,16 @@ function! s:command_in_directory_of_file(cmd)
   return substitute(s:cmd_in_dir, "'", '"', 'g')
 endfunction
 
-function! s:is_in_a_git_repo()
-  let cmd = s:escape('git rev-parse' . s:discard_stdout_and_stderr())
-  call system(s:command_in_directory_of_file(cmd))
-  return !v:shell_error
+function! s:is_in_a_repo()
+  return s:file_repotype != 0
 endfunction
 
-function! s:is_tracked_by_git()
-  let cmd = s:escape('git ls-files --error-unmatch' . s:discard_stdout_and_stderr() . ' ' . shellescape(s:file()))
+function! s:is_tracked_by_repo()
+  if s:file_repotype == 1
+    let cmd = s:escape('git ls-files --error-unmatch' . s:discard_stdout_and_stderr() . ' ' . shellescape(s:file()))
+  elseif s:file_repotype == 2
+    let cmd = s:escape('svn info' . s:discard_stdout_and_stderr() . ' ' . shellescape(s:file()))
+  endif
   call system(s:command_in_directory_of_file(cmd))
   return !v:shell_error
 endfunction
@@ -207,11 +228,20 @@ endfunction
 " Diff processing {{{
 
 function! s:run_diff(realtime)
-  if a:realtime
-    let blob_name = ':./' . fnamemodify(s:file(),':t')
-    let cmd = 'diff -U0 ' . g:gitgutter_diff_args . ' <(git show '. blob_name .') - '
-  else
-    let cmd = 'git diff --no-ext-diff --no-color -U0 ' . g:gitgutter_diff_args . ' ' . shellescape(s:file())
+  if s:file_repotype == 1
+    if a:realtime
+      let blob_name = ':./' . fnamemodify(s:file(),':t')
+      let cmd = 'diff -U0 ' . g:gitgutter_diff_args . ' <(git show '. blob_name .') - '
+    else
+      let cmd = 'git diff --no-ext-diff --no-color -U0 ' . g:gitgutter_diff_args . ' ' . shellescape(s:file())
+    endif
+  elseif s:file_repotype == 2
+    if a:realtime
+      let file_name = './' . fnamemodify(s:file(),':t')
+      let cmd = 'diff -U0 ' . g:gitgutter_diff_args_svn . ' <(svn cat '. file_name .') - '
+    else
+      let cmd = 'svn diff --diff-cmd diff -x "-U0 ' . g:gitgutter_diff_args_svn . '" ' . shellescape(s:file())
+    endif
   endif
   if s:grep_available
     let cmd .= s:grep_command
